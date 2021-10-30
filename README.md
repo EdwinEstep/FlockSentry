@@ -49,3 +49,10 @@ To clone the submodule repository:
 ```
 git submodule update --init --recursive
 ```
+
+## Train the YOLOv5 Model
+
+```
+cd yolov5
+python3 train.py --img 640 --batch 16 --epochs 120 --data custom_data.yaml --weights yolov5s.pt
+```
