@@ -1,3 +1,7 @@
+# Python
+.venv/
+__init__.py
+
 # Prerequisites
 *.d
 
