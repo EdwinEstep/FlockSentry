@@ -1,2 +1,0 @@
-chicken_idle
-fox
