@@ -50,6 +50,12 @@ To clone the submodule repository:
 git submodule update --init --recursive
 ```
 
+To push changes to the FlockSentry repo, but not the YOLOv5 repo (like you almost always will), run the following git push command:
+
+```
+git push --recurse-submodules=check
+```
+
 ## Train the YOLOv5 Model
 
 ```
