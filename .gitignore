@@ -1,3 +1,7 @@
+# Training Data
+all_image_data/
+!all_image_data/copy_to_train_and_val.py
+
 # Python
 .venv/
 __init__.py
