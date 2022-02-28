@@ -1,6 +1,8 @@
 # Training Data
 all_image_data/
 !all_image_data/copy_to_train_and_val.py
+audio/audioset_videos/
+audio/AudioSet_Files/
 
 # Python
 .venv/
