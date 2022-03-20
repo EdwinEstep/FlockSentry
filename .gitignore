@@ -1,6 +1,9 @@
 # Training Data
 all_image_data/
 !all_image_data/copy_to_train_and_val.py
+training/
+!training/flocksentry.ipynb
+!training/custom.yaml
 
 # Python
 .venv/
