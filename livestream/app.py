@@ -3,6 +3,7 @@ Made following [this guide](https://www.instructables.com/Video-Streaming-Web-Se
 [this guide](https://towardsdatascience.com/video-streaming-in-web-browsers-with-opencv-flask-93a38846fe00)
 """
 from flask import Flask, render_template, Response
+import random
 import time
 import cv2
 
@@ -10,17 +11,18 @@ app = Flask(__name__)
 
 
 CAMERA = None
-LAST_REFRESH = None
+CHICKENS_SPOOKED = False
+LAST_UPDATE = None
 
 
 @app.route("/")
 def index():
     """Video streaming home page."""
-    return render_template("index.html")
+    return render_template("index.html", spooked=CHICKENS_SPOOKED)
 
 
 def gen():
-    global CAMERA, LAST_REFRESH
+    global CAMERA, CHICKENS_SPOOKED, LAST_UPDATE
 
     """Video streaming generator function."""
     if CAMERA is None:
@@ -28,13 +30,10 @@ def gen():
         if not CAMERA.isOpened():
             raise RuntimeError("Could not open camera")
     while True:
-        if LAST_REFRESH is not None:
-            print(f"refresh time: {time.time() - LAST_REFRESH}")
         # frame = camera.get_frame()
         _, img = CAMERA.read()
         _, buf = cv2.imencode(".jpg", img)
         frame = buf.tobytes()
-        LAST_REFRESH = time.time()
         yield (b"--frame\r\n" b"Content-Type: image/jpeg\r\n\r\n" + frame + b"\r\n")
 
 
@@ -44,5 +43,10 @@ def video_feed():
     return Response(gen(), mimetype="multipart/x-mixed-replace; boundary=frame")
 
 
+@app.route("/status")
+def status():
+    return "FLOCK SPOOKED" if random.random() >= 0.5 else "all is well with the flock"
+
+
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8080, debug=True, threaded=True)
+    app.run(host="localhost", port=8080, debug=True, threaded=True)

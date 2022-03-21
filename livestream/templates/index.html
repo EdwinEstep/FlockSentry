@@ -1,0 +1,33 @@
+<html>
+  <head>
+    <title>Chickens Are Awesome</title>
+    <!-- <link rel="stylesheet" href='../static/style.css'/> -->
+    <script type="text/javascript">
+      // from this answer:
+      // https://stackoverflow.com/questions/57537925/dynamically-updating-the-text-in-a-flask-app-for-temperature-readings
+
+      function chickensStatus() {
+        var xmlHttp = new XMLHttpRequest();
+        xmlHttp.open("GET", "http://localhost:8080/status", false);
+        xmlHttp.send(null);
+        return xmlHttp.responseText;
+      }
+
+      function writeChickenStatus() {
+        var status = chickensStatus();
+        document.getElementById("chickenStatusLabel").innerText = status;
+      }
+
+      function addTimer() {
+        setInterval(writeChickenStatus, 500);
+      }
+    </script>
+  </head>
+  <body onload="addTimer();">
+    <h1>Chickens Are Awesome</h1>
+    <h3>Chicken status: <span id="chickenStatusLabel"></span></h3>
+    <h3><img src="{{ url_for('video_feed') }}" width="90%"></h3>
+    <hr>
+    <p>Flock Sentry, baby</p>
+  </body>
+</html>
