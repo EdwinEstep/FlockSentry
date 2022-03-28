@@ -9,6 +9,12 @@ import io
 import cv2
 from PIL import Image
 import torch
+import math 
+
+
+def sigmoid(x):
+    return 1 / (1 + math.exp(-x))
+
 
 app = Flask(__name__)
 
@@ -41,6 +47,16 @@ def gen():
         
         results = model(img)
         print(results.pandas().xyxy[0])
+        for result in results.pandas().xyxy[0]:
+            xmin, ymin = result["xmin"], result["ymin"]
+            xmax, ymax = result["xmax"], result["ymax"]
+            label = result["name"]
+            r = sigmoid(hash(label) / (1 << 63)) * 255
+            g = sigmoid(hash(label[1:] + label[0]) / (1 << 63)) * 255
+            b = sigmoid(hash(label[2:] + label[0:2]) / (1 << 63)) * 255
+            brightness = math.sqrt(r * r + g * g + b * b)
+            color = int(r / brightness * 255) << 6 | int(g / brightness * 255) << 4 | int(b / brightness * 255) << 2 | 255
+            cv2.rectangle(img, (xmin, ymin), (xmax, ymax), color)
 
         frame = buf.tobytes()
         yield (b"--frame\r\n" b"Content-Type: image/jpeg\r\n\r\n" + frame + b"\r\n")
