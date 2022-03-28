@@ -5,7 +5,10 @@ Made following [this guide](https://www.instructables.com/Video-Streaming-Web-Se
 from flask import Flask, render_template, Response
 import random
 import time
+import io
 import cv2
+from PIL import Image
+import torch
 
 app = Flask(__name__)
 
@@ -24,6 +27,8 @@ def index():
 def gen():
     global CAMERA, CHICKENS_SPOOKED, LAST_UPDATE
 
+    model = torch.hub.load('ultralytics/yolov5', 'custom', path="model_train/best.pt", force_reload=True)
+
     """Video streaming generator function."""
     if CAMERA is None:
         CAMERA = cv2.VideoCapture(0)
@@ -32,7 +37,11 @@ def gen():
     while True:
         # frame = camera.get_frame()
         _, img = CAMERA.read()
-        _, buf = cv2.imencode(".jpg", img)
+        _, buf = cv2.imencode(".jpg", img ) #encode as jpg
+        
+        results = model(img)
+        print(results.pandas().xyxy[0])
+
         frame = buf.tobytes()
         yield (b"--frame\r\n" b"Content-Type: image/jpeg\r\n\r\n" + frame + b"\r\n")
 
@@ -49,4 +58,4 @@ def status():
 
 
 if __name__ == "__main__":
-    app.run(host="localhost", port=8080, debug=True, threaded=True)
+    app.run(host="0.0.0.0", port=8080, debug=True, threaded=True)
