@@ -22,6 +22,7 @@ app = Flask(__name__)
 CAMERA = None
 CHICKENS_SPOOKED = False
 LAST_UPDATE = None
+MODEL = None
 
 
 @app.route("/")
@@ -31,33 +32,38 @@ def index():
 
 
 def gen():
-    global CAMERA, CHICKENS_SPOOKED, LAST_UPDATE
-
-    model = torch.hub.load('ultralytics/yolov5', 'custom', path="model_train/best.pt", force_reload=True)
+    global CAMERA, CHICKENS_SPOOKED, LAST_UPDATE, MODEL
 
     """Video streaming generator function."""
     if CAMERA is None:
         CAMERA = cv2.VideoCapture(0)
         if not CAMERA.isOpened():
             raise RuntimeError("Could not open camera")
-    while True:
-        # frame = camera.get_frame()
-        _, img = CAMERA.read()
-        _, buf = cv2.imencode(".jpg", img ) #encode as jpg
-        
-        results = model(img)
-        print(results.pandas().xyxy[0])
-        for result in results.pandas().xyxy[0]:
-            xmin, ymin = result["xmin"], result["ymin"]
-            xmax, ymax = result["xmax"], result["ymax"]
-            label = result["name"]
-            r = sigmoid(hash(label) / (1 << 63)) * 255
-            g = sigmoid(hash(label[1:] + label[0]) / (1 << 63)) * 255
-            b = sigmoid(hash(label[2:] + label[0:2]) / (1 << 63)) * 255
-            brightness = math.sqrt(r * r + g * g + b * b)
-            color = int(r / brightness * 255) << 6 | int(g / brightness * 255) << 4 | int(b / brightness * 255) << 2 | 255
-            cv2.rectangle(img, (xmin, ymin), (xmax, ymax), color)
 
+    if MODEL is None:
+        MODEL = torch.hub.load('ultralytics/yolov5', 'custom', path="model_train/best.pt", force_reload=True)
+
+    while True:
+        _, img = CAMERA.read()
+        
+        results = MODEL(img)
+        # print(results.pandas().xyxy[0])
+        df = results.pandas().xyxy[0]
+        for i in df.index:
+            xmin, ymin = int(df["xmin"][i]), int(df["ymin"][i])
+            xmax, ymax = int(df["xmax"][i]), int(df["ymax"][i])
+            label = df["name"][i]
+            r = sigmoid(hash(label) / (1 << 63))
+            g = sigmoid(hash(label[1:] + label[0]) / (1 << 63))
+            b = sigmoid(hash(label[2:] + label[0:2]) / (1 << 63))
+            brightness = math.sqrt(r * r + g * g + b * b)
+            r = int(r*255/brightness)
+            g = int(g*255/brightness)
+            b = int(b*255/brightness)
+            cv2.putText(img, label, (xmin, ymin), cv2.FONT_HERSHEY_SIMPLEX, 1, (b, g, r), 1, cv2.LINE_AA)
+            cv2.rectangle(img, (xmin, ymin), (xmax, ymax), (b, g, r), 2)
+
+        _, buf = cv2.imencode(".jpg", img ) #encode as jpg
         frame = buf.tobytes()
         yield (b"--frame\r\n" b"Content-Type: image/jpeg\r\n\r\n" + frame + b"\r\n")
 
