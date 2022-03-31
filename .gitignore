@@ -4,6 +4,7 @@ all_image_data/
 training/
 !training/flocksentry.ipynb
 !training/custom.yaml
+!training/test.mp4
 
 # Python
 .venv/
