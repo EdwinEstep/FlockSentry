@@ -31,6 +31,21 @@ from AudioNet import AudioNet
 from audio_train import train
 from audio_test import test
 
+def pad_x_collate_function(batch):
+    #xs = [sample[0] for sample in batch]
+    # If you want to be a little fancy, you can do the above in one line 
+    #xs = zip(*batch)
+    xs = [sample[0][0] for sample in batch]
+    #xs = torch.stack(xs) # can't do yet - tensors different sized
+    ys = [sample[1] for sample in batch]
+    ys = torch.from_numpy(np.ones(len(ys), dtype = bool));
+    print("Length of xs[0]: ", len(xs[0]))
+    print("Len of xs: ", len(xs))
+    xs = torch.nn.utils.rnn.pad_sequence(xs, batch_first = True, padding_value=0)
+    
+    return xs, ys
+
+
 # check if cuda gpu available
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(device)
@@ -43,15 +58,16 @@ csv_path = './audio/AudioSet_train.csv'
 file_path = './audio/AudioSet_Files'
 
 # AudioSet class - formats data & gets filenames with matching labels
-train_set = AudioSet(csv_path, file_path, "./audio/AudioSet_Files")
-test_set = AudioSet(csv_path, file_path, [10])
-print("Train set size: " + len(train_set))
-print("Test set size: " + len(test_set))
+train_set = AudioSet(csv_path, file_path, "./audio/AudioSet_Files/")
+#test_set = AudioSet(csv_path, file_path, [10])
+print("Train set size: ", len(train_set))
+#print("Test set size: " + len(test_set))
 
 kwargs = {'num_workers': 1, 'pin_memory': True} if device == 'cuda' else {} #needed for using datasets on gpu
 
-train_loader = torch.utils.data.DataLoader(train_set, batch_size = 128, shuffle = True, **kwargs)
-test_loader = torch.utils.data.DataLoader(test_set, batch_size = 128, shuffle = True, **kwargs)
+# TODO: prep the data here so the loop in audio_train.py can enumerate properly
+train_loader = torch.utils.data.DataLoader(train_set, batch_size = 3, collate_fn = pad_x_collate_function, shuffle = True, **kwargs)
+#test_loader = torch.utils.data.DataLoader(test_set, batch_size = 128, shuffle = True, **kwargs)
 
 # define the model
 model = AudioNet()
@@ -68,6 +84,7 @@ log_interval = 20
 for epoch in range(1, 41):
     if epoch == 31:
         print("First round of training complete. Setting learn rate to 0.001.")
+    optimizer.step()
     scheduler.step()
     train(model, epoch, optimizer, log_interval, train_loader, device)
-    test(model, epoch, test_loader, device)
+    #test(model, epoch, test_loader, device)

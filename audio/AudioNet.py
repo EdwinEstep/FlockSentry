@@ -11,24 +11,27 @@ import torch.nn as nn
     the receptive field is around 10ms. This size is similar to speech processing 
     applications that often use receptive fields ranging from 20ms to 40ms.
 '''
+
+# TODO: preprocess the data; make it all be standard 8kHz, and the same length
+# split up positive ID's between shortened files
 # take samples every ~5 seconds
 class AudioNet(nn.Module):
     def __init__(self):
         super(AudioNet, self).__init__()
-        self.conv1 = nn.Conv1d(1, 128, 80, 4)
-        self.bn1 = nn.BatchNorm1d(128)
+        self.conv1 = nn.Conv1d(1, 3, 80, 4)
+        self.bn1 = nn.BatchNorm1d(3)
         self.pool1 = nn.MaxPool1d(4)
-        self.conv2 = nn.Conv1d(128, 128, 3)
+        self.conv2 = nn.Conv1d(3, 3, 3)
         self.bn2 = nn.BatchNorm1d(128)
         self.pool2 = nn.MaxPool1d(4)
-        self.conv3 = nn.Conv1d(128, 256, 3)
-        self.bn3 = nn.BatchNorm1d(256)
+        self.conv3 = nn.Conv1d(3, 6, 3)
+        self.bn3 = nn.BatchNorm1d(6)
         self.pool3 = nn.MaxPool1d(4)
-        self.conv4 = nn.Conv1d(256, 512, 3)
-        self.bn4 = nn.BatchNorm1d(512)
+        self.conv4 = nn.Conv1d(6, 12, 3)
+        self.bn4 = nn.BatchNorm1d(12)
         self.pool4 = nn.MaxPool1d(4)
         self.avgPool = nn.AvgPool1d(30) #input should be 512x30 so this outputs a 512x1
-        self.fc1 = nn.Linear(512, 10)
+        self.fc1 = nn.Linear(12, 10)
         
     def forward(self, x):
         x = self.conv1(x)

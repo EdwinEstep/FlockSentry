@@ -3,13 +3,13 @@ import youtube_dl
 import subprocess
 import os
 
-# OS X: use ctrl+z to stop -- ctrl+z only kills current process
+# OS X: use ctrl+z to stop -- ctrl+c only kills current process
 # Windows: if ctrl+c and ctrl+z don't stop the entire program, try ctrl+[Pause/Break] key
 # note: ctrl+z should work independent of OS if using it in a python shell
 
 
 # import youtube video id's, clip start times, and clip end times from dataset
-csvData = pd.read_csv('./FlockSentry/audio/AudioSet_train.csv', usecols=[0,1,2], header = None, index_col=None)
+csvData = pd.read_csv('./audio/AudioSet_train.csv', usecols=[0,1,2], header = None, index_col=None)
 
 # trim header
 ytLinks = csvData.iloc[1:,0]
@@ -20,7 +20,7 @@ end_times = csvData.iloc[1:,2]
 # print(end_times)
 
 # change to directory to download files in
-os.chdir('./FlockSentry/audio/audioset_videos/')
+os.chdir('./audio/audioset_videos/')
 
 # iterate through youtube links
 for n in range(len(ytLinks)):

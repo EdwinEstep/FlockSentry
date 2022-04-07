@@ -1,8 +1,11 @@
 # function to train the model
+import torch.nn.functional as F
 
 def train(model, epoch, optimizer, log_interval, train_loader, device):
-    model.train()
-    for batch_idx, (data, target) in enumerate(train_loader):
+    #model.train()
+    print("Starting loop..............")
+    for batch_idx, (data, target) in enumerate(train_loader): # try using collate fn, padding data
+        print("*************************Loop")
         optimizer.zero_grad()
         data = data.to(device)
         target = target.to(device)
