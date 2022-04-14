@@ -18,7 +18,7 @@ import torch.nn as nn
 class AudioNet(nn.Module):
     def __init__(self):
         super(AudioNet, self).__init__()
-        self.conv1 = nn.Conv1d(1, 3, 80, 4)
+        self.conv1 = nn.Conv1d(1, 80, 3, 4) # batch size 3, receptive field 80, kernel size 4,  stride 1
         self.bn1 = nn.BatchNorm1d(3)
         self.pool1 = nn.MaxPool1d(4)
         self.conv2 = nn.Conv1d(3, 3, 3)

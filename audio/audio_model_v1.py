@@ -14,6 +14,9 @@
 
 # dataset YouTube ID's are preceeded by: youtu.be/
 
+
+# continuous input; feed past ~2s into model
+
 # tutorial start:
 from email import header
 import torch
@@ -58,7 +61,7 @@ csv_path = './audio/AudioSet_train.csv'
 file_path = './audio/AudioSet_Files'
 
 # AudioSet class - formats data & gets filenames with matching labels
-train_set = AudioSet(csv_path, file_path, "./audio/AudioSet_Files/")
+train_set = AudioSet(csv_path, file_path, "./audio/AudioSet_Files/chunked/")
 #test_set = AudioSet(csv_path, file_path, [10])
 print("Train set size: ", len(train_set))
 #print("Test set size: " + len(test_set))

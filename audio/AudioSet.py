@@ -3,6 +3,7 @@ import torchaudio
 import pandas as pd
 from torch.utils.data import Dataset
 import os
+import numpy as np
 
 # AudioSet formattor class
 # change to match AudioSet dataset - try to make samples same length or same sampling freq
@@ -34,15 +35,16 @@ class AudioSet(Dataset):
         # self.folders = [] # add later when more Audio Files are available
 
         # loop through CSV (skipping header)
-        for i in range(1,len(csvData)):
+        #for i in range(1,len(csvData)): # we've chunked data, don't need to check it against csv
             # if the youtube ID is in a filename in the audiofiles folder...
             # if csvData.iloc[i, 0] in audio_folder:
-            for filename in os.listdir(audio_folder):
-                if csvData.iloc[i, 0] in filename:
-                    self.file_names.append(filename)  # filename ending with youtube ID
-                    self.labels.append(csvData.iloc[i, 4::])    # labels
-                    # self.folders.append(csvData.iloc[0, :])   # add later when more Audio Files are available
-                
+        for filename in os.listdir(audio_folder):
+            #if csvData.iloc[i, 0] in filename: # no need to check; data is chunked
+            self.file_names.append(filename)  # filename ending with youtube ID
+            self.labels = np.ones_like(self.file_names) # all of the files have positive ID's, so they all get ones
+            #self.labels.append(csvData.iloc[i, 4::])    # labels
+            # self.folders.append(csvData.iloc[0, :])   # add later when more Audio Files are available
+        
         self.file_path = file_path
         # self.mixer = torchaudio.transforms.DownmixMono() # Convert audio files to one channel # DownmixMono deprecated
         
@@ -79,7 +81,7 @@ class AudioSet(Dataset):
         # TODO: change when more Audio Files available (select folder from audio files folder)
         #path = self.file_path + "fold" + str(self.folders[index]) + "/" + self.file_names[index]
         
-        path = self.file_path + "/" + self.file_names[index]
+        path = self.file_path + "/chunked/" + self.file_names[index]
         
         try:
             sound = torchaudio.load(path) #, normalization = True) # removed out = None
