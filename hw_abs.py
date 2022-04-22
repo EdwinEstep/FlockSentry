@@ -9,7 +9,26 @@ def sigmoid(x):
     return 1 / (1 + math.exp(-x))
 
 
-NAMES = ["chicken", "fox", "bird", "person", "cat", "dog"]
+NAMES = [  # class names
+    # Labels in our dataset
+    "chicken",
+    "fox",
+    # "housepet",  # TODO: remove housepet in favor of cat and dog
+    # labels in COCO dataset
+    "bird",
+    "person",
+    # "cat",
+    "dog",
+    # "horse",
+    # "sheep",
+    # "cow",
+    # "bear",
+    # More labels in our dataset. Confusing, I know.
+    # "bobcat",
+    # "mountain_lion",
+    # "raccoon",
+    # "coyote",
+]
 
 
 def draw_boxes(img_fname):
@@ -17,7 +36,7 @@ def draw_boxes(img_fname):
     labels_fname = img_fname.replace("images/", "labels/").split(".", 1)[0] + ".txt"
     with open(labels_fname, "r") as f:
         img_height, img_width, _ = img.shape
-        line_width = int(0.01 * img_height)
+        line_width = int(0.005 * img_height)
         for line in f.readlines():
             linesplit = line.split(" ")
             object_class = int(linesplit[0])
@@ -32,20 +51,20 @@ def draw_boxes(img_fname):
             g = sigmoid(hash(label[1:] + label[0]) >> 63)
             b = sigmoid(hash(label[2:] + label[0:2]) >> 63)
             brightness = math.sqrt(r * r + g * g + b * b)
-            r = int(r * 255 / brightness / 2 + 128)
-            g = int(g * 255 / brightness / 2 + 128)
-            b = int(b * 255 / brightness / 2 + 128)
+            r = int(r * 255 / brightness)
+            g = int(g * 255 / brightness)
+            b = int(b * 255 / brightness)
             cv2.putText(
                 img,
                 label,
-                (min(x1, x2) + 5 * line_width, min(y1, y2) + 5 * line_width),
+                (min(x1, x2), min(y1, y2)),
                 cv2.FONT_HERSHEY_SIMPLEX,
-                line_width / 5,
+                1,
                 (b, g, r),
-                max(line_width // 2, 1),
+                1,
                 cv2.LINE_AA,
             )
-            cv2.rectangle(img, (x1, y1), (x2, y2), (b, g, r), line_width)
+            cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 0), line_width)
 
     window_name = f"Annotated {img_fname}"
     cv2.namedWindow(window_name, cv2.WINDOW_KEEPRATIO)
@@ -54,25 +73,23 @@ def draw_boxes(img_fname):
 
 
 if __name__ == "__main__":
-    # train_path = "training/yolov5/data/images/train/"
-    train_path = "training/22apr22-chickens/"
-    # val_path = "training/yolov5/data/images/val/"
-    val_path = ""
+    train_path = "training/new_data/"
     filenames = os.listdir(train_path)
-    if os.path.exists(val_path):
-        filenames.extend(os.listdir(val_path))
-    filenames = [
-        f for f in filenames if (f.endswith(".png") or f.endswith(".jpg") or f.endswith(".jpeg"))
-    ]
-    random.shuffle(filenames)
-    for img_fname in filenames:
-        if os.path.exists(train_path + img_fname):
-            print(f"Showing {train_path + img_fname}")
-            draw_boxes(train_path + img_fname)
-        elif os.path.exists(val_path + img_fname):
-            print(f"Showing {val_path + img_fname}")
-            draw_boxes(val_path + img_fname)
+    filenames = [f for f in filenames if f.endswith(".txt")]
+    for fname in filenames:
+        if os.path.exists(train_path + fname):
+            print(f"Editing {train_path + fname}")
+            with open(train_path + fname, "r") as f:
+                lines = f.readlines()
+                lines = [[float(n) for n in line.split(" ")] for line in lines]
+                for line in lines:
+                    line[0] = int(line[0])
+                    line[3] = abs(line[3])
+                    line[4] = abs(line[4])
+            with open(train_path + fname, "w") as f:
+                f.writelines([" ".join([str(n) for n in line]) + "\n" for line in lines])
         else:
+            print(f"not found {train_path + fname}")
             continue
 
         if cv2.waitKey(0) == ord("q"):
