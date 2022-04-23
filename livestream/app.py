@@ -59,6 +59,24 @@ def draw_box(img, x1, y1, x2, y2, label):
     cv2.rectangle(img, (xmin, ymin), (xmax, ymax), (b, g, r), 2)
 
 
+def iou(box1, box2):
+    left1, top1, width1, height1 = box1
+    left2, top2, width2, height2 = box2
+    x_overlap = 0
+    if left1 < left2:
+        x_overlap = max(0, left1 + width1 - left2 - max(0, left1 + width1 - left2 - width2))
+    else:
+        x_overlap = max(0, left2 + width2 - left1 - max(0, left2 + width2 - left1 - width1))
+    y_overlap = 0
+    if top1 < top2:
+        y_overlap = max(0, top1 + height1 - top2 - max(0, top1 + height1 - top2 - height2))
+    else:
+        y_overlap = max(0, top2 + height2 - top1 - max(0, top2 + height2 - top1 - height1))
+    intersect = x_overlap * y_overlap
+    union = width1 * height1 + width2 * height2 - intersect
+    return intersect / union
+
+
 app = Flask(__name__)
 
 
@@ -80,32 +98,83 @@ def gen():
     """Video streaming generator function."""
     if CAMERA is None:
         # CAMERA = cv2.VideoCapture(gstreamer_pipeline(), cv2.CAP_GSTREAMER)
-        CAMERA = cv2.VideoCapture(0)
+        # CAMERA = cv2.VideoCapture(0)
+        CAMERA = cv2.VideoCapture("/home/joshdw/Downloads/test_video.mp4")
+        out = cv2.VideoWriter("output_1.avi", -1, 30.0, (640, 480))
+
+    chicken_trackers = []
 
     while CAMERA.isOpened():
         ok, img = CAMERA.read()
         if not ok:
             break
 
-        # h, w, _ = img.shape
-        # new_h = 640 // max(w, h) * h
-        # new_w = 640 // max(w, h) * w
-        # cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
-        # img = torch.from_numpy(img).half() / 255
-        # img = [img]
+        img = cv2.resize(img, (640, 480), interpolation=cv2.INTER_LINEAR)
 
         # img = torch.from_numpy(img).to(device)
 
         results = MODEL(img)
         df = results.pandas().xyxy[0]
+        chickens_detected = []
         for i in df.index:
-            if df["class"][i] in [0, 1]:
-                draw_box(
-                    img, df["xmin"][i], df["xmax"][i], df["ymin"][i], df["ymax"][i], df["name"][i]
+            if df["class"][i] == 0:
+                chickens_detected.append(
+                    (
+                        df["name"][i],
+                        df["confidence"][i],
+                        df["xmin"][i],
+                        df["ymin"][i],
+                        df["xmax"][i] - df["xmin"][i],
+                        df["ymax"][i] - df["ymin"][i],
+                    )
                 )
+
+        # Remove chicken and fox trackers that are too old
+        chicken_trackers_to_delete = []
+        chickens_detected_to_delete = []
+        chickens_remembered = []
+        for i, (age, conf, t) in enumerate(chicken_trackers):
+            _, box = t.update(img)
+            print("remembered", box, "with confidence", conf, "and age", age)
+            if age > 15 * conf:  # 1/2 second for 100% confidence
+                print("deleting", box, "from trackers")
+                chicken_trackers_to_delete.append(i)
+                continue
+            for j, box2 in enumerate(chickens_detected):
+                if iou(box, box2[2:]) > 0.6:
+                    print("deleting", box, "from detections")
+                    t.init(img, box2[2:])
+                    chicken_trackers[i] = (0, box[1], t)
+                    if j not in chickens_detected_to_delete:
+                        chickens_detected_to_delete.append(j)
+            chickens_remembered.append(("remembered_chicken", conf, *box))
+            chicken_trackers[i] = (age + 1, conf, t)
+
+        chicken_trackers_to_delete = sorted(chicken_trackers_to_delete, reverse=True)
+        for i in chicken_trackers_to_delete:
+            del chicken_trackers[i]
+        chickens_detected_to_delete = sorted(chickens_detected_to_delete, reverse=True)
+        for i in chickens_detected_to_delete:
+            print("deleting", i)
+            del chickens_detected[i]
+
+        # Sort by confidence.  Least confident will be left out.
+        chickens_detected = sorted(chickens_detected, key=lambda c: c[1], reverse=True)
+        for _, conf, l, t, w, h in chickens_detected:
+            print("initializing", (l, t, w, h))
+            tracker = cv2.legacy.TrackerKCF_create()
+            tracker.init(img, (l, t, w, h))
+            if len(chicken_trackers) < 10:  # Limit the number of trackers to a reasonable amount
+                chicken_trackers.append((0, conf, tracker))
+
+        for name, _, l, t, w, h in chickens_detected + chickens_remembered:
+            draw_box(img, l, t, l + w, t + h, name)
+
+        out.write(img)
         _, buf = cv2.imencode(".jpg", img)  # encode as jpg
         frame = buf.tobytes()
         yield (b"--frame\r\n" b"Content-Type: image/jpeg\r\n\r\n" + frame + b"\r\n")
+    out.release()
     CAMERA.release()
     CAMERA = None
     print("camera closed")
