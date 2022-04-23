@@ -3,13 +3,11 @@ Made following [this guide](https://www.instructables.com/Video-Streaming-Web-Se
 [this guide](https://towardsdatascience.com/video-streaming-in-web-browsers-with-opencv-flask-93a38846fe00)
 """
 from flask import Flask, render_template, Response
+from flask_cors import CORS
 import random
 import time
-import io
 import cv2
-from PIL import Image
 import torch
-import torchvision
 import math
 
 
@@ -77,7 +75,53 @@ def iou(box1, box2):
     return intersect / union
 
 
+class CustomTracker(object):
+    """A wrapper of an OpenCV KCF object tracker that keeps a record of its age and confidence"""
+
+    def __init__(self, img, label, confidence, bbox):
+        self.tracker = cv2.legacy.TrackerKCF_create()
+        self.tracker.init(img, bbox)
+        self.label = label
+        self.confidence = confidence
+        self.age = 0
+        self.path = [self._center_of_bbox(bbox)]
+        self.latest_bbox = bbox
+        self.vx = 0
+        self.vy = 0
+        self.t = time.time()
+
+    def _center_of_bbox(self, bbox):
+        l, t, w, h = bbox
+        return round((2 * l + w) / 2), round((2 * t + h) / 2)
+
+    def reset(self, img, confidence, bbox):
+        """Provide a new bounding box and confidence to the tracker"""
+        self.tracker.init(img, bbox)
+        self.confidence = confidence
+        self.age = 0
+        self.latest_bbox = bbox
+        self.path = [self._center_of_bbox(bbox)]
+
+    def update(self, img):
+        """Calculate a bounding box from the tracker"""
+        self.age += 1
+        _, bbox = self.tracker.update(img)
+        if bbox[0] > 2 and bbox[1] > 2:
+            self.path.append(self._center_of_bbox(bbox))
+        self.latest_bbox = bbox
+        dt = time.time() - self.t
+        self.t = time.time()
+        if len(self.path) > 1:
+            self.vx = (self.path[-1][0] - self.path[-2][0]) / dt
+            self.vy = (self.path[-1][1] - self.path[-2][1]) / dt
+        else:
+            self.vx = 0
+            self.vy = 0
+        return _, bbox
+
+
 app = Flask(__name__)
+CORS(app)
 
 
 CAMERA = None
@@ -97,27 +141,31 @@ def gen():
 
     """Video streaming generator function."""
     if CAMERA is None:
-        # CAMERA = cv2.VideoCapture(gstreamer_pipeline(), cv2.CAP_GSTREAMER)
-        # CAMERA = cv2.VideoCapture(0)
-        CAMERA = cv2.VideoCapture("/home/joshdw/Downloads/test_video.mp4")
-        out = cv2.VideoWriter("output_1.avi", -1, 30.0, (640, 480))
+        CAMERA = cv2.VideoCapture(gstreamer_pipeline(), cv2.CAP_GSTREAMER)
+
+    out = cv2.VideoWriter("./output_1.avi", -1, 30.0, (640, 480))
 
     chicken_trackers = []
+    agitation_short_avg = 0
+    agitation_long_avg = 100
+    flock_count = 0
 
     while CAMERA.isOpened():
         ok, img = CAMERA.read()
         if not ok:
             break
 
-        img = cv2.resize(img, (640, 480), interpolation=cv2.INTER_LINEAR)
+        # img = cv2.resize(img, (640, 480), interpolation=cv2.INTER_LINEAR)
 
         # img = torch.from_numpy(img).to(device)
 
         results = MODEL(img)
         df = results.pandas().xyxy[0]
         chickens_detected = []
+        foxes_detected = []
         for i in df.index:
             if df["class"][i] == 0:
+                # if df["confidence"][i] > 0.:
                 chickens_detected.append(
                     (
                         df["name"][i],
@@ -128,50 +176,99 @@ def gen():
                         df["ymax"][i] - df["ymin"][i],
                     )
                 )
+            elif df["class"][i] == 1:
+                # if df["confidence"][i] > 0.:
+                foxes_detected.append(
+                    (
+                        df["name"][i],
+                        df["confidence"][i],
+                        df["xmin"][i],
+                        df["ymin"][i],
+                        df["xmax"][i] - df["xmin"][i],
+                        df["ymax"][i] - df["ymin"][i],
+                    )
+                )
+
+        # Detect agitation
+        velocities = [math.sqrt(t.vx * t.vx + t.vy * t.vy) for t in chicken_trackers]
+        agitation = sum(velocities) / max(1, len(velocities))
+        # concerning_velocities = [v for v in velocities if v > 80]
+        # agitation = len(concerning_velocities) / max(1, len(velocities))
+        flock_count = 0.99 * flock_count + 0.01 * len(chicken_trackers)
+        agitation_short_avg = 0.8 * agitation_short_avg + 0.2 * agitation
+        agitation_long_avg = 0.999 * agitation_long_avg + 0.001 * agitation
+        # print(
+        #     f"long: {agitation_long_avg:.2f}, short: {agitation_short_avg:.2f}, flock count: {flock_count:.2f}"
+        # )
+        CHICKENS_SPOOKED = (
+            # fox in scene
+            len(foxes_detected) > 0
+            # higher than normal agitation
+            or (agitation_long_avg > 10 and agitation_short_avg > 10 * agitation_long_avg)
+            # flock disappears
+            or (flock_count > 2 and len(chickens_detected) < 0.5 * flock_count)
+        )
 
         # Remove chicken and fox trackers that are too old
         chicken_trackers_to_delete = []
         chickens_detected_to_delete = []
         chickens_remembered = []
-        for i, (age, conf, t) in enumerate(chicken_trackers):
-            _, box = t.update(img)
-            print("remembered", box, "with confidence", conf, "and age", age)
-            if age > 15 * conf:  # 1/2 second for 100% confidence
-                print("deleting", box, "from trackers")
+        for i, tracker in enumerate(chicken_trackers):
+            _, box = tracker.update(img)
+            # print(
+            #     "remembered chicken no.",
+            #     i,
+            #     "with confidence",
+            #     tracker.confidence,
+            #     "and age",
+            #     tracker.age,
+            # )
+            if tracker.age > 120 * tracker.confidence * tracker.confidence:
+                # print("deleting no.", i, "from trackers")
                 chicken_trackers_to_delete.append(i)
                 continue
             for j, box2 in enumerate(chickens_detected):
-                if iou(box, box2[2:]) > 0.6:
-                    print("deleting", box, "from detections")
-                    t.init(img, box2[2:])
-                    chicken_trackers[i] = (0, box[1], t)
+                if iou(box, box2[2:]) > 0.4:
+                    # print("deleting no.", j, "from detections")
+                    tracker.reset(img, box2[1], box2[2:])
                     if j not in chickens_detected_to_delete:
                         chickens_detected_to_delete.append(j)
-            chickens_remembered.append(("remembered_chicken", conf, *box))
-            chicken_trackers[i] = (age + 1, conf, t)
+            chickens_remembered.append((box[0], conf, *box))
 
         chicken_trackers_to_delete = sorted(chicken_trackers_to_delete, reverse=True)
         for i in chicken_trackers_to_delete:
             del chicken_trackers[i]
         chickens_detected_to_delete = sorted(chickens_detected_to_delete, reverse=True)
         for i in chickens_detected_to_delete:
-            print("deleting", i)
             del chickens_detected[i]
 
         # Sort by confidence.  Least confident will be left out.
         chickens_detected = sorted(chickens_detected, key=lambda c: c[1], reverse=True)
-        for _, conf, l, t, w, h in chickens_detected:
-            print("initializing", (l, t, w, h))
-            tracker = cv2.legacy.TrackerKCF_create()
-            tracker.init(img, (l, t, w, h))
+        for label, conf, l, t, w, h in chickens_detected:
             if len(chicken_trackers) < 10:  # Limit the number of trackers to a reasonable amount
-                chicken_trackers.append((0, conf, tracker))
+                # print("initializing chicken no.", len(chicken_trackers), "with confidence", conf)
+                tracker = CustomTracker(img, label, conf, (l, t, w, h))
+                chicken_trackers.append(tracker)
 
-        for name, _, l, t, w, h in chickens_detected + chickens_remembered:
+        for tracker in chicken_trackers:
+            l, t, w, h = tracker.latest_bbox
+            if w == 0 or h == 0:
+                continue
+            name = tracker.label
             draw_box(img, l, t, l + w, t + h, name)
+            last_point = None
+            for point in tracker.path:
+                if last_point is None:
+                    last_point = point
+                    continue
+                cv2.line(img, point, last_point, (0, 255, 0), thickness=2, lineType=cv2.LINE_AA)
+                last_point = point
+
+        # for name, _, l, t, w, h in chickens_detected + chickens_remembered:
+        #     draw_box(img, l, t, l + w, t + h, name)
 
         out.write(img)
-        _, buf = cv2.imencode(".jpg", img)  # encode as jpg
+        _, buf = cv2.imencode(".jpg", img)
         frame = buf.tobytes()
         yield (b"--frame\r\n" b"Content-Type: image/jpeg\r\n\r\n" + frame + b"\r\n")
     out.release()
@@ -188,7 +285,8 @@ def video_feed():
 
 @app.route("/status")
 def status():
-    return "FLOCK SPOOKED" if random.random() >= 0.5 else "all is well with the flock"
+    global CHICKENS_SPOOKED
+    return "FLOCK SPOOKED" if CHICKENS_SPOOKED else "all is well with the flock"
 
 
 if __name__ == "__main__":
